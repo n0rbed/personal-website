@@ -1,0 +1,70 @@
+name: Test and Deploy infrastructure
+
+on:
+  push:
+    branches: [ main ]
+    paths-ignore:
+      - 'fullwebsite/**'
+  pull_request:
+    branches: [ main ]
+    paths-ignore:
+      - 'fullwebsite/**'
+
+env:
+  AWS_REGION: us-east-1
+  TF_VAR_certificate_arn: ${{ secrets.TF_VAR_certificate_arn }}
+  TF_VAR_hosted_zone_id: ${{ secrets.TF_VAR_hosted_zone_id }}
+  TF_VAR_domain_name: ${{ vars.TF_VAR_domain_name }}
+
+permissions:
+  id-token: write   # This is required for requesting the JWT
+  contents: read 
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Run Lambda unit tests
+        run: |
+          python -m pytest tests/ -v
+
+  deploy_infrastructure:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@main
+        with:
+          role-to-assume: ${{ secrets.ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        run: terraform -chdir=terraform init
+
+      - name: Terraform Plan
+        run: terraform -chdir=terraform plan
+
+      - name: Terraform Apply
+        run: terraform -chdir=terraform apply -auto-approve
+

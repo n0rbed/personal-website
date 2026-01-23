@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>yassin</title>
+    <link rel="stylesheet" href="style.css">
+
+    <script>
+        document.addEventListener("DOMContentLoaded", async () => {
+            const visitIndicator = document.getElementById("visit-indicator");
+            const countSpan = document.getElementById("countspan");
+
+            const API_URL = "https://ft2gljvezf.execute-api.us-east-1.amazonaws.com/views";
+
+            try {
+                let response;
+
+                if (localStorage.getItem("hasVisitedBefore")) {
+                    // Returning visitor → just read
+                    response = await fetch(API_URL);
+                } else {
+                    // First-time visitor → increment + read
+                    localStorage.setItem("hasVisitedBefore", "true");
+                    response = await fetch(API_URL, { method: "POST" });
+                }
+
+                if (!response.ok) {
+                    throw new Error("API request failed");
+                }
+
+                const data = await response.json();
+                visitIndicator.textContent = "# of views = " + data.views;
+
+            } catch (err) {
+                console.error(err);
+                visitIndicator.textContent = "—";
+            }
+        });
+    </script>
+
+
+</head>
+<body>
+<div id="visit-indicator"></div>
+
+<div class="wrapper">
+
+<nav>
+    <a href="./" class="active">Home</a>
+    <a href="projects.html">Projects</a>
+    <a href="blog.html">Blog</a>
+    <a href="./CV.pdf" target="_blank">CV</a>
+    <a href="contact.html">Contact</a>
+</nav>
+
+<main>
+    <h1>yass1n.com</h1>
+    <span id="countspan"></span>
+    <p>
+        Hi. My name is Yassin Ahmed (pronounced yaa-seen). I'm a junior year Communications and Information
+        Engineering major at Zewail UST, based in Cairo, Egypt. Below is a list of noteworthy things about me.
+    </p>
+
+
+    <ul style="padding-right: 0; padding-left: 10px">
+        <li>I'm an AWS Solutions Architect Associate.</li>
+        <li>I've interned as a database administrator for the Egyptian Credit Bureau</li>
+        <li>I've previously worked under <a href="https://sumiya11.github.io/">Alexander Demin</a> and <a href="https://shashi.biz/">Shashi Gowda</a> in developing a symbolic solver for Symbolics.jl.</li>
+    </ul>
+
+    <p>
+        I love computer systems. 
+        My current main interest is cloud computing. 
+        I'm currently looking for graduation project ideas and summer research internships related to computer systems in general,
+        so please feel free to reach out to me if you stumble upon any that I can contribute to!
+    </p>
+
+    <p>In my free time I do sports and watch movies. Growing up I was a competitive taekwondo athlete. Here are some ascii waves for entertainment purposes:</p>
+
+    <pre id="ascii-waves" style="text-align:center; font-family:monospace; font-size:13px; line-height:1.2"></pre>
+</main>
+</div>
+    <script>
+    const asciiWaves = document.getElementById('ascii-waves');
+    let t = 0;
+    setInterval(() => {
+    let art = '';
+    for (let y = 0; y < 8; y++) {
+        let line = '';
+        for (let x = 0; x < 58; x++) {
+        let wave = Math.sin((x + t) / 5) + Math.cos((y + t/2) / 3);
+        line += wave > 1 ? '~' : wave > 0.3 ? '-' : wave > -0.5 ? '.' : ' ';
+        }
+        art += line + '\n';
+    }
+    asciiWaves.innerText = art;
+    t += 0.7;
+    }, 60);
+    </script>
+
+    <script>
+    const COUNT_URL = "https://api.countapi.xyz";
+    const NAMESPACE = "yass1n.com";
+    const KEY = "b06d5318-c25d-11f0-8de9-0242ac120002";
+    const counter = document.querySelectorAll('span');
+
+    const getCount = async () => {
+        const response = await fetch(`${COUNT_URL}/get/${NAMESPACE}/${KEY}`);
+        const data = await response.json();
+        setValue(data.value);
+    };
+
+    const incrementCount = async () => {
+        const response = await fetch(`${COUNT_URL}/hit/${NAMESPACE}/${KEY}`);
+        const data = await response.json();
+        setValue(data.value);
+    };
+
+
+    const setValue = (num) => {
+        counter[0].innerHTML = num;
+    };
+
+    if (localStorage.getItem("hasVisited") == null) {
+        incrementCount()
+            .then(() => {
+            localStorage.setItem("hasVisited", "true");
+            })
+            .catch((err) => console.log(err));
+    } else {
+        getCount()
+            .catch((err) => console.log(err));
+    }
+    </script>
+</body>
+</html>

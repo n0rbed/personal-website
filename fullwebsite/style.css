@@ -1,0 +1,200 @@
+/* --- Modern Flat Color Theme --- */
+:root {
+    --bg: #f4f5f7;
+    --accent: #1a1a1a;    /* <— new dark neutral accent */
+    --text: #1d1d1f;
+}
+
+#visit-indicator {
+    position: fixed;
+    top: 15px;
+    right: 20px;
+    padding: 8px 14px;
+    background-color: #111;
+    color: #fff;
+    font-size: 13px;
+    border-radius: 6px;
+    font-family: system-ui, sans-serif;
+    opacity: 0.9;
+    z-index: 1000;
+}
+
+/* Font */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
+html, body {
+    height: 100%;
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Inter", sans-serif;
+}
+/* Wrapper */
+.wrapper {
+    max-width: 1100px;
+    margin: auto;
+    display: flex;
+    min-height: 100vh;  /* full page height for the line */
+    /* ✨ remove padding-top so the line starts at the very top */
+}
+/* Sidebar */
+nav {
+    width: 220px;
+    padding-right: 20px;
+    box-sizing: border-box;
+    background: var(--bg);
+    border-right: 2px solid #bfc2c7;
+    /* NEW: pushes the sidebar text down to align with main text */
+    padding-top: 40px;
+}
+nav a {
+    display: block;
+    width: calc(100% + 20px); /* extend beyond sidebar width to reach the border */
+    padding: 6px 20px 6px 10px; /* add right padding to reach the border */
+    margin: 0;
+    margin-right: -20px; /* pull it to the right to touch the border */
+    text-decoration: none;
+    color: var(--accent);
+    font-size: 15px;
+    font-weight: 500;
+    border-radius: 0;
+    box-sizing: border-box;
+    transition: all 0.2s ease;
+}
+/* Inactive link hover */
+nav a:hover {
+    background: rgba(0,0,0,0.08);
+}
+/* Active link styles */
+nav a.active {
+    background: var(--accent);
+    color: white !important;
+}
+/* Active link hover - lighter background */
+nav a.active:hover {
+    background: #333333; /* slightly lighter than the active state */
+}
+nav .submenu a {
+    padding-left: 20px;
+    font-size: 14px;
+}
+
+/* Main content */
+main {
+    padding: 40px 20px 0 30px;  /* top padding for main content only */
+    width: 100%;
+    background: none;
+}
+
+h1 {
+    color: var(--accent);
+    margin-top: 0;
+    font-weight: 800;
+    margin-bottom: 4px; /* small space under title */
+}
+h2 {
+    color: var(--accent);
+    margin-top: 32px;
+    font-weight: 800;
+    margin-bottom: 0px; /* small space under title */
+}
+
+
+.blog-date {
+    display: block;
+    font-size: 0.9em;
+    color: #777;
+    margin-top: 0;       /* remove extra top margin */
+    margin-bottom: 15px; /* space before the paragraph */
+}
+
+
+.blog-header {
+    display: flex;
+    align-items: baseline; /* keep date aligned with title */
+    gap: 20px;             /* space between title and date */
+    margin-bottom: 15px;
+}
+
+.code-container {
+    background: #0d1117;
+    border-radius: 8px;
+    padding: 3px;
+    width: auto;               /* Let content dictate width */
+    margin-right: 32px;        /* Always keep 32px from the right edge */
+    box-sizing: border-box;
+}
+
+.code-block {
+    background: #0d1117;
+    border-radius: 4px;
+    padding: 16px;
+    overflow-x: auto;
+    line-height: 1.6;
+    color: #e6edf3;
+}
+
+.line {
+    display: block;
+    white-space: pre;
+}
+
+.prompt {
+    color: #58a6ff;
+    font-weight: bold;
+}
+
+.macro {
+    color: #d2a8ff;
+}
+
+.keyword {
+    color: #ff7b72;
+}
+
+.function {
+    color: #ffa657;
+}
+
+.operator {
+    color: #ff7b72;
+}
+
+.variable {
+    color: #79c0ff;
+}
+
+.number {
+    color: #a5d6ff;
+}
+
+.type {
+    color: #7ee787;
+}
+
+.string {
+    color: #a5d6ff;
+}
+
+.comment {
+    color: #8b949e;
+}
+
+
+
+
+
+a {
+    color: #2582C6;               /* from image, stays fixed */
+    text-decoration: none;        /* remove underline */
+    transition: text-decoration 0.15s;
+}
+a:visited {
+    color: #2582C6;               /* keep same color when visited */
+}
+a:hover, a:focus {
+    text-decoration: underline;   /* underline ONLY on hover/focus */
+    color: #2582C6;               /* keep color unchanged */
+}
+a:active {
+    color: #2582C6;               /* keep color unchanged on click */
+}

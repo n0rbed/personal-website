@@ -1,0 +1,63 @@
+name: Deploy Website
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'fullwebsite/**'
+
+env:
+  AWS_REGION: us-east-1
+
+permissions:
+  id-token: write   # This is required for requesting the JWT
+  contents: read 
+
+jobs:
+  upload_website:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@main
+        with:
+          role-to-assume: ${{ secrets.ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Init
+        run: terraform -chdir=terraform init
+
+      - name: Check infra exists
+        id: infra-check
+        run: |
+          if terraform -chdir=terraform output -raw bucket_name >/dev/null 2>&1; then
+            echo "ready=true" >> $GITHUB_OUTPUT
+          else
+            echo "ready=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Get S3 bucket name
+        if: steps.infra-check.outputs.ready == 'true'
+        id: terraform-outputs
+        run: |
+          BUCKET_NAME=$(terraform -chdir=terraform output -raw bucket_name)
+          echo "bucket_name=$BUCKET_NAME" >> $GITHUB_OUTPUT
+
+      - name: Deploy website to S3
+        if: steps.infra-check.outputs.ready == 'true'
+        run: |
+          aws s3 sync fullwebsite/ s3://${{ steps.terraform-outputs.outputs.bucket_name }}/ --delete
+
+      - name: Invalidate CloudFront cache
+        if: steps.infra-check.outputs.ready == 'true'
+        run: |
+          DISTRIBUTION_ID=$(terraform -chdir=terraform output -raw cloudfront_distribution_id)
+          aws cloudfront create-invalidation --distribution-id $DISTRIBUTION_ID --paths "/*"
+
+

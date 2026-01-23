@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>yassin</title>
+    <link rel="stylesheet" href="../style.css">
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+</head>
+<body>
+
+<div class="wrapper">
+
+<nav>
+    <a href="../index.html">Home</a>
+
+    <a href="../projects.html">Projects</a>
+    <div class="submenu">
+        <a href="thiswebsite.html">This website</a>
+        <a href="symbolic_solver.html" class="active">Symbolic Solver</a>
+    </div>
+
+    <a href="../blog.html">Blog</a>
+    <a href="../CV.pdf" target="_blank">CV</a>
+    <a href="../contact.html">Contact</a>
+</nav>
+
+<main>
+    <h1>Symbolic Solver</h1>
+    <p>The below is copied from my <a href="https://discourse.julialang.org/t/new-symbolic-solver-for-symbolics-jl/118466">post</a> over at julia discourse.</p>
+
+
+    <span class="blog-date" style="margin-bottom:0">August 2024</span>
+    <p style="margin-top:0">A new symbolic solver authored by me has just been merged to <a href="https://github.com/JuliaSymbolics/Symbolics.jl">Symbolics.jl</a>, and is available in the latest release (v6.2.0). I want to share some of its capabilities here!</p>
+
+    <p><a href="https://github.com/JuliaSymbolics/Symbolics.jl/pull/1192">Link</a> to PR</p>
+
+    <p>The solver features:</p>
+    <ul>
+        <li>Multivariate polynomial solving</li>
+        <li>Exact (symbolic) solutions</li>
+        <li>Solving using isolation and attraction (inspired by a paper from R. W. Hamming)</li>
+    </ul>
+
+    <h2>Examples and usage</h2>
+    <p>Solving with parameters and transcendental functions:</p>
+    <div class="code-container">
+        <div class="code-block">
+            <span class="line"><span class="prompt">julia&gt;</span> <span class="macro">@variables</span> <span class="variable">a b c d e x</span>;</span>
+            <span class="line"></span>
+            <span class="line"><span class="prompt">julia&gt;</span> <span class="function">symbolic_solve</span>(<span class="variable">a</span><span class="operator">*</span><span class="function">log</span>(<span class="variable">x</span>)<span class="operator">^</span><span class="variable">b</span> <span class="operator">+</span> <span class="variable">c</span> <span class="operator">~</span> <span class="number">0</span>, <span class="variable">x</span>)</span>
+            <span class="line"><span class="number">1</span><span class="operator">-</span>element <span class="type">Vector{SymbolicUtils.BasicSymbolic{Real}}</span>:</span>
+            <span class="line"> <span class="variable">e</span><span class="operator">^</span>((<span class="operator">-</span><span class="variable">c</span>) <span class="operator">/</span> <span class="variable">a</span>)<span class="operator">^</span>(<span class="number">1</span> <span class="operator">/</span> <span class="variable">b</span>))</span>
+        </div>
+    </div>
+
+
+    <p>Solving by detecting polynomialization opportunities (\(9^x + 3^x = 0\) and the like also works)</p>
+    <div class="code-container">
+    <div class="code-block">
+        <span class="line"><span class="prompt">julia&gt;</span> <span class="function">symbolic_solve</span>(<span class="function">sin</span>(<span class="variable">x</span><span class="operator">^</span><span class="number">2</span> <span class="operator">+</span><span class="number">1</span>)<span class="operator">^</span><span class="number">2</span> <span class="operator">+</span> <span class="function">sin</span>(<span class="variable">x</span><span class="operator">^</span><span class="number">2</span> <span class="operator">+</span><span class="number">1</span>) <span class="operator">+</span> <span class="number">3</span>)</span>
+        <span class="line"><span class="comment">[ Info: var"##426" ϵ Ζ</span></span>
+        <span class="line"><span class="comment">[ Info: var"##429" ϵ Ζ</span></span>
+        <span class="line"><span class="number">4</span>-element <span class="type">Vector</span>{<span class="type">SymbolicUtils.BasicSymbolic</span>{<span class="type">Complex</span>{<span class="type">Real</span>}}}:</span>
+        <span class="line"> (<span class="number">1//2</span>)*√(-<span class="number">4</span>(<span class="number">1</span> - <span class="function">asin</span>((<span class="number">1//2</span>)*(-<span class="number">1</span> + (<span class="number">0</span> + <span class="number">1im</span>)*√(<span class="number">11</span>))) - (<span class="variable">π</span>*<span class="number">2</span><span class="variable">var"##426"</span>)))</span>
+        <span class="line"> (-<span class="number">1//2</span>)*√(-<span class="number">4</span>(<span class="number">1</span> - <span class="function">asin</span>((<span class="number">1//2</span>)*(-<span class="number">1</span> + (<span class="number">0</span> + <span class="number">1im</span>)*√(<span class="number">11</span>))) - (<span class="variable">π</span>*<span class="number">2</span><span class="variable">var"##426"</span>)))</span>
+        <span class="line"> (<span class="number">1//2</span>)*√(-<span class="number">4</span>(<span class="number">1</span> - <span class="function">asin</span>((<span class="number">1//2</span>)*(-<span class="number">1</span> - ((<span class="number">0</span> + <span class="number">1im</span>)*√(<span class="number">11</span>)))) - (<span class="variable">π</span>*<span class="number">2</span><span class="variable">var"##429"</span>)))</span>
+        <span class="line"> (-<span class="number">1//2</span>)*√(-<span class="number">4</span>(<span class="number">1</span> - <span class="function">asin</span>((<span class="number">1//2</span>)*(-<span class="number">1</span> - ((<span class="number">0</span> + <span class="number">1im</span>)*√(<span class="number">11</span>)))) - (<span class="variable">π</span>*<span class="number">2</span><span class="variable">var"##429"</span>)))</span>
+    </div>
+    </div>
+
+
+
+    <p>Solving high degree polynomials exactly:</p>
+    <div class="code-container">
+    <div class="code-block">
+        <span class="line"><span class="prompt">julia&gt;</span> <span class="variable">expr</span> <span class="operator">=</span> <span class="function">expand</span><span class="operator">(</span><span class="operator">(</span><span class="variable">x</span> <span class="operator">+</span> <span class="number">2</span><span class="operator">)</span><span class="operator">*</span><span class="operator">(</span><span class="variable">x</span><span class="operator">^</span><span class="number">2</span> <span class="operator">+</span> <span class="number">2</span><span class="variable">x</span> <span class="operator">+</span> <span class="number">1</span><span class="operator">)</span><span class="operator">*</span><span class="operator">(</span><span class="variable">x</span><span class="operator">^</span><span class="number">4</span> <span class="operator">-</span> <span class="number">3</span><span class="variable">x</span><span class="operator">^</span><span class="number">3</span> <span class="operator">+</span> <span class="variable">x</span> <span class="operator">+</span> <span class="number">5</span><span class="operator">)</span><span class="operator">*</span><span class="operator">(</span><span class="variable">x</span><span class="operator">^</span><span class="number">4</span> <span class="operator">-</span> <span class="number">1</span><span class="operator">))</span></span>
+        <span class="line"><span class="number">-10</span> <span class="operator">-</span> <span class="number">27</span><span class="variable">x</span> <span class="operator">-</span> <span class="number">25</span><span class="operator">(</span><span class="variable">x</span><span class="operator">^</span><span class="number">2</span><span class="operator">)</span> <span class="operator">-</span> <span class="number">3</span><span class="operator">(</span><span class="variable">x</span><span class="operator">^</span><span class="number">3</span><span class="operator">)</span> <span class="operator">+</span> <span class="number">22</span><span class="operator">(</span><span class="variable">x</span><span class="operator">^</span><span class="number">4</span><span class="operator">)</span> <span class="operator">+</span> <span class="number">34</span><span class="operator">(</span><span class="variable">x</span><span class="operator">^</span><span class="number">5</span><span class="operator">)</span> <span class="operator">+</span> <span class="number">24</span><span class="operator">(</span><span class="variable">x</span><span class="operator">^</span><span class="number">6</span><span class="operator">)</span> <span class="operator">+</span> <span class="number">2</span><span class="operator">(</span><span class="variable">x</span><span class="operator">^</span><span class="number">7</span><span class="operator">)</span> <span class="operator">-</span> <span class="number">12</span><span class="operator">(</span><span class="variable">x</span><span class="operator">^</span><span class="number">8</span><span class="operator">)</span> <span class="operator">-</span> <span class="number">7</span><span class="operator">(</span><span class="variable">x</span><span class="operator">^</span><span class="number">9</span><span class="operator">)</span> <span class="operator">+</span> <span class="variable">x</span><span class="operator">^</span><span class="number">10</span> <span class="operator">+</span> <span class="variable">x</span><span class="operator">^</span><span class="number">11</span></span>
+        <span class="line comment"># output is truncated</span>
+        <span class="line"><span class="prompt">julia&gt;</span> <span class="function">symbolic_solve</span><span class="operator">(</span><span class="variable">expr</span>, <span class="variable">x</span>, <span class="variable">dropmultiplicity</span><span class="operator">=</span><span class="keyword">false</span><span class="operator">)</span></span>
+        <span class="line"><span class="number">9</span><span class="operator">-</span><span class="variable">element</span> <span class="type">Vector</span><span class="operator">{</span><span class="type">Any</span><span class="operator">}:</span></span>
+        <span class="line"><span class="number">-2</span></span>
+        <span class="line"><span class="number">-1</span></span>
+        <span class="line"><span class="comment">...</span></span>
+        <span class="line"><span class="operator">(</span><span class="number">-1</span><span class="operator">//</span><span class="number">2</span><span class="operator">)</span><span class="operator">*</span><span class="operator">(</span><span class="number">0</span> <span class="operator">+</span> <span class="number">2</span><span class="variable">im</span><span class="operator">)</span></span>
+    </div>
+    </div>
+
+    <p>Also works with parameters:</p>
+    <div class="code-container">
+        <div class="code-block">
+        <span class="line"><span class="prompt">julia&gt;</span> <span class="variable">expr</span> <span class="operator">=</span> <span class="function">expand</span><span class="operator">(</span><span class="operator">(</span><span class="variable">x</span> <span class="operator">+</span> <span class="variable">b</span><span class="operator">)</span><span class="operator">*</span><span class="operator">(</span><span class="variable">x</span><span class="operator">^</span><span class="number">2</span> <span class="operator">+</span> <span class="number">2</span><span class="variable">x</span> <span class="operator">+</span> <span class="number">1</span><span class="operator">)</span><span class="operator">*</span><span class="operator">(</span><span class="variable">x</span><span class="operator">^</span><span class="number">2</span> <span class="operator">-</span> <span class="variable">a</span><span class="operator">)</span><span class="operator">)</span></span>
+        <span class="line"><span class="operator">-</span><span class="variable">a</span><span class="operator">*</span><span class="variable">b</span> <span class="operator">-</span> <span class="variable">a</span><span class="operator">*</span><span class="variable">x</span> <span class="operator">-</span> <span class="number">2</span><span class="variable">a</span><span class="operator">*</span><span class="variable">b</span><span class="operator">*</span><span class="variable">x</span> <span class="operator">-</span> <span class="number">2</span><span class="variable">a</span><span class="operator">*</span><span class="operator">(</span><span class="variable">x</span><span class="operator">^</span><span class="number">2</span><span class="operator">)</span> <span class="operator">+</span> <span class="variable">b</span><span class="operator">*</span><span class="operator">(</span><span class="variable">x</span><span class="operator">^</span><span class="number">2</span><span class="operator">)</span> <span class="operator">+</span> <span class="variable">x</span><span class="operator">^</span><span class="number">3</span> <span class="operator">-</span> <span class="variable">a</span><span class="operator">*</span><span class="variable">b</span><span class="operator">*</span><span class="operator">(</span><span class="variable">x</span><span class="operator">^</span><span class="number">2</span><span class="operator">)</span> <span class="operator">-</span> <span class="variable">a</span><span class="operator">*</span><span class="operator">(</span><span class="variable">x</span><span class="operator">^</span><span class="number">3</span><span class="operator">)</span> <span class="operator">+</span> <span class="number">2</span><span class="variable">b</span><span class="operator">*</span><span class="operator">(</span><span class="variable">x</span><span class="operator">^</span><span class="number">3</span><span class="operator">)</span> <span class="operator">+</span> <span class="number">2</span><span class="operator">(</span><span class="variable">x</span><span class="operator">^</span><span class="number">4</span><span class="operator">)</span> <span class="operator">+</span> <span class="variable">b</span><span class="operator">*</span><span class="operator">(</span><span class="variable">x</span><span class="operator">^</span><span class="number">4</span><span class="operator">)</span> <span class="operator">+</span> <span class="variable">x</span><span class="operator">^</span><span class="number">5</span></span>
+        <span class="line"><span class="prompt">julia&gt;</span> <span class="function">symbolic_solve</span><span class="operator">(</span><span class="variable">expr</span>, <span class="variable">x</span>, <span class="variable">dropmultiplicity</span><span class="operator">=</span><span class="keyword">false</span><span class="operator">)</span></span>
+        <span class="line"><span class="number">5</span><span class="operator">-</span><span class="variable">element</span> <span class="type">Vector</span><span class="operator">{</span><span class="type">Any</span><span class="operator">}:</span></span>
+        <span class="line"><span class="number">-1</span></span>
+        <span class="line"><span class="number">-1</span></span>
+        <span class="line"><span class="operator">-</span><span class="variable">b</span></span>
+        <span class="line"><span class="operator">(</span><span class="number">1</span><span class="operator">//</span><span class="number">2</span><span class="operator">)</span><span class="operator">*</span><span class="operator">√</span><span class="operator">(</span><span class="number">4</span><span class="variable">a</span><span class="operator">)</span></span>
+        <span class="line"><span class="operator">(</span><span class="operator">-</span><span class="number">1</span><span class="operator">//</span><span class="number">2</span><span class="operator">)</span><span class="operator">*</span><span class="operator">√</span><span class="operator">(</span><span class="number">4</span><span class="variable">a</span><span class="operator">)</span></span>
+        </div>
+    </div>
+
+
+    <p>Exact intersection of a sphere and a line in \(\mathbb{C}^3\):</p>
+    <div class="code-container">
+        <div class="code-block">
+            <span class="line"><span class="prompt">julia&gt;</span> <span class="function">symbolic_solve</span><span class="operator">(</span></span>
+            <span class="line">   [<span class="variable">x</span><span class="operator">^</span><span class="number">2</span> <span class="operator">+</span> <span class="variable">y</span><span class="operator">^</span><span class="number">2</span> <span class="operator">+</span> <span class="variable">z</span><span class="operator">^</span><span class="number">2</span> <span class="operator">-</span> <span class="number">9</span>, </span>
+            <span class="line">   <span class="variable">x</span> <span class="operator">-</span> <span class="number">2</span><span class="variable">y</span> <span class="operator">+</span> <span class="number">3</span>,</span>
+            <span class="line">   <span class="variable">y</span> <span class="operator">-</span> <span class="variable">z</span>]</span>
+            <span class="line">   ,[<span class="variable">x</span>,<span class="variable">y</span>,<span class="variable">z</span>])</span>
+            <span class="line"><span class="number">2</span><span class="operator">-</span><span class="variable">element</span> <span class="type">Vector</span><span class="operator">{</span><span class="type">Any</span><span class="operator">}:</span></span>
+            <span class="line"><span class="type">Dict</span><span class="operator">{</span><span class="type">Num</span>, <span class="type">Any</span><span class="operator">}(</span><span class="variable">z</span> <span class="operator">=&gt;</span> <span class="number">2</span>, <span class="variable">y</span> <span class="operator">=&gt;</span> <span class="number">2</span>, <span class="variable">x</span> <span class="operator">=&gt;</span> <span class="number">1</span><span class="operator">)</span></span>
+            <span class="line"><span class="type">Dict</span><span class="operator">{</span><span class="type">Num</span>, <span class="type">Any</span><span class="operator">}(</span><span class="variable">z</span> <span class="operator">=&gt;</span> <span class="number">0</span>, <span class="variable">y</span> <span class="operator">=&gt;</span> <span class="number">0</span>, <span class="variable">x</span> <span class="operator">=&gt;</span> <span class="operator">-</span><span class="number">3</span><span class="operator">)</span></span>
+        </div>
+    </div>
+
+    <p>For the example above, we can check our answers by plotting everything. As expected there are only 2 intersections with the same coordinates our solver found:</p>
+    <img src="sphere_intersection_symbolicsolv.png">
+
+    <p>System of polynomials with infinite solutions are solved in terms of one of the variables:</p>
+    <div class="code-container">
+        <div class="code-block">
+            <span class="line"><span class="prompt">julia&gt;</span> <span class="function">symbolic_solve</span><span class="operator">([</span><span class="variable">x</span><span class="operator">*</span><span class="variable">z</span> <span class="operator">-</span> <span class="variable">y</span> <span class="operator">-</span> <span class="number">1</span>, <span class="variable">x</span> <span class="operator">+</span> <span class="variable">z</span><span class="operator">], [</span><span class="variable">x</span>, <span class="variable">y</span>, <span class="variable">z</span><span class="operator">])</span></span>
+            <span class="line"><span class="comment">┌ Warning: Infinite number of solutions</span></span>
+            <span class="line"><span class="comment">└ @ SymbolicsGroebnerExt ~/code/julia/Symbolics.jl/ext/SymbolicsGroebnerExt.jl:216</span></span>
+            <span class="line"><span class="number">1</span><span class="operator">-</span><span class="variable">element</span> <span class="type">Vector</span><span class="operator">{</span><span class="type">Dict</span><span class="operator">{</span><span class="type">Num</span>, <span class="type">Any</span><span class="operator">}}</span><span class="operator">:</span></span>
+            <span class="line"><span class="type">Dict</span><span class="operator">(</span><span class="variable">z</span> <span class="operator">=&gt;</span> <span class="variable">z</span>, <span class="variable">y</span> <span class="operator">=&gt;</span> <span class="operator">-</span><span class="number">1</span> <span class="operator">-</span> <span class="operator">(</span><span class="variable">z</span><span class="operator">^</span><span class="number">2</span><span class="operator">)</span>, <span class="variable">x</span> <span class="operator">=&gt;</span> <span class="operator">-</span><span class="variable">z</span><span class="operator">)</span></span>
+        </div>
+    </div>
+
+    <h2>Note and credits</h2>
+    <p>Many thanks to <a href="https://sumiya11.github.io/">alex</a> and <a href="https://shashi.biz/">shashi</a> for being great mentors throughout the project’s length!</p>
+</main>
+
+
+
+</div>
+
+</body>
+</html>
