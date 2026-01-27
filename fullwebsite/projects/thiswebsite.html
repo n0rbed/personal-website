@@ -24,8 +24,163 @@
 </nav>
 
 <main>
-    <h1>This website</h1>
-    <p>... is still a work in progress. I'm adding some more cool stuff here then you'll get to know everything!</p>
+<h1>This website</h1>
+<p>
+Hello. This write-up walks you through the infrastructure behind my website and how everything is deployed and works together. I'll cover the basics quickly and focus more on the design choices and the reasoning behind the architecture.
+</p>
+
+<p>
+You can view the repository for this website <a href="https://github.com/n0rbed/personal-website" target="_blank">here</a>.
+</p>
+
+<p>
+To appropriately design system architecture, we must first define our problem statement. For me, the problem was: 
+</p>
+
+<blockquote>
+"I want a personal website that is fast and easy to deploy AND update. I also want to track how many people visit my website without significantly increasing operational costs." 
+</blockquote>
+
+<p>With that in mind, we begin.</p>
+
+<h2>Base infrastructure</h2>
+
+<p>
+Since I'm using my website to share my thoughts with the world, and the content is mostly static text, the standard S3 + CloudFront solution is sufficient. The architecture is demonstrated in the diagram below.
+</p>
+
+<img src="./thisWebsite_ArchitectureDiagrams/s3pluscloudfront.png">
+
+<p>
+Unfortunately, this isn't convenient for users, as they would have to visit the website using the CloudFront distribution's domain name, which looks something like:
+</p>
+
+<div class="code-container">
+    <div class="code-block">
+        <span class="line">d111111abcdef8.cloudfront.net</span>
+    </div>
+</div>
+
+<p>To fix this, we:</p>
+
+<ol>
+    <li>Register a domain</li>
+    <li>Attach the domain certificate to our CloudFront distribution</li>
+    <li>Create an S3 bucket named after the domain name (it must have the same name as the domain, this will be our distribution's origin, more on why 
+        <a href="https://stackoverflow.com/questions/25883888/why-must-the-amazon-s3-bucket-name-be-the-same-as-website-name-when-hosting-a-st">here</a>)
+    </li>
+    <li>Add Route53 A and AAAA records pointing to your CloudFront distribution</li>
+</ol>
+
+<p>Our architecture now looks like:</p>
+
+<img src="./thisWebsite_ArchitectureDiagrams/s3pluscloudfrontplusr53.png">
+
+<p>Now we move on to the fun stuff.</p>
+
+<h2>Keeping track of the views</h2>
+
+<p>
+To do this, we need a backend to store and increment the view count. We have many options here, but DynamoDB fits our requirements because it integrates easily with serverless architecture, making the overall cost cheaper. Serverless architecture in applications like this makes the operational cost essentially free.
+</p>
+
+<p>
+We use JavaScript to call API Gateway when a user loads the website. 
+If the user has visited before, we simply request the view counter from DynamoDB. 
+If it's their first visit, JavaScript submits a POST request, which increments the counter before returning it to the frontend. 
+The JavaScript code that detects whether the user is visiting for the first time is shown below:
+</p>
+
+<div class="code-container">
+    <div class="code-block">
+        <span class="line"><span class="keyword">document</span>.addEventListener(<span class="string">"DOMContentLoaded"</span>, <span class="keyword">async</span> () => {</span>
+        <span class="line">    <span class="keyword">const</span> visitIndicator = <span class="keyword">document</span>.getElementById(<span class="string">"visit-indicator"</span>);</span>
+        <span class="line">    <span class="keyword">const</span> countSpan = <span class="keyword">document</span>.getElementById(<span class="string">"countspan"</span>);</span>
+        <span class="line"></span>
+        <span class="line">    <span class="keyword">const</span> API_URL = <span class="string">"https://kh2gl8ve1l.execute-api.us-east-1.amazonaws.com/views"</span>;</span>
+        <span class="line"></span>
+        <span class="line">    <span class="keyword">try</span> {</span>
+        <span class="line">        <span class="keyword">let</span> response;</span>
+        <span class="line"></span>
+        <span class="line">        <span class="keyword">if</span> (localStorage.getItem(<span class="string">"hasVisitedBefore"</span>)) {</span>
+        <span class="line">            response = <span class="keyword">await</span> fetch(API_URL);</span>
+        <span class="line">        } <span class="keyword">else</span> {</span>
+        <span class="line">            localStorage.setItem(<span class="string">"hasVisitedBefore"</span>, <span class="string">"true"</span>);</span>
+        <span class="line">            response = <span class="keyword">await</span> fetch(API_URL, { method: <span class="string">"POST"</span> });</span>
+        <span class="line">        }</span>
+        <span class="line"></span>
+        <span class="line">        <span class="keyword">if</span> (!response.ok) {</span>
+        <span class="line">            <span class="keyword">throw</span> <span class="keyword">new</span> Error(<span class="string">"API request failed"</span>);</span>
+        <span class="line">        }</span>
+        <span class="line"></span>
+        <span class="line">        <span class="keyword">const</span> data = <span class="keyword">await</span> response.json();</span>
+        <span class="line">        visitIndicator.textContent = <span class="string">"# of views = "</span> + data.views;</span>
+        <span class="line"></span>
+        <span class="line">    } <span class="keyword">catch</span> (err) {</span>
+        <span class="line">        console.error(err);</span>
+        <span class="line">        visitIndicator.textContent = <span class="string">"—"</span>;</span>
+        <span class="line">    }</span>
+        <span class="line">});</span>
+    </div>
+</div>
+
+<p>To aid these transactions, we use Lambda.</p>
+
+<img src="./thisWebsite_ArchitectureDiagrams/viewsInfra.png">
+
+<p>Now that we've explained the architecture, we move on to the process of implementing and developing all of this.</p>
+
+<h2>Implementation and Development</h2>
+
+<h3>Deploying the Infrastructure</h3>
+
+<p>
+While you could just finger-blast your way through the AWS console in order to configure this,
+this doesn't solve part of my problem statement: ensuring that my solution is fast to deploy.
+</p>
+
+<p>My first attempt at this was using CloudFormation (CFN). While it works, it has several disadvantages:</p>
+
+<ul>
+    <li>CFN is significantly slower compared to other solutions like Terraform.</li>
+    <li>CFN does not support imports, so if a stack deletion fails, you're on your own to delete the remaining infrastructure that CFN no longer manages.</li>
+    <li>CFN's change sets are far inferior compared to Terraform's state changes.</li>
+</ul>
+
+<p>
+I discovered these issues by trying both tools, and the conclusion is clear: Terraform is better overall. 
+CDK is another option worth considering. However, it lacks something Terraform has: cloud agnosticism. 
+If you're working in a company with infrastructure hosted across multiple clouds, Terraform can manage all of it from a single directory. 
+This is incredibly valuable for teams as it makes everything much easier to track and configure. 
+</p>
+
+<h3>CI/CD pipelines: Making everything easy to integrate and develop further</h3>
+
+<p>
+The final touch that completes this project and satisfies the last part of my problem statement is making the infrastructure and website easy to update. 
+We can achieve this by designing two CI/CD pipelines that automatically redeploy infrastructure changes AND update the website.
+</p>
+
+<p>Two GitHub Actions Workflows (CI/CD pipelines) were designed and implemented:</p>
+
+<ol>
+    <li>
+        <strong>Backend (Infrastructure)</strong>: This pipeline initializes and applies the Terraform templates, ensuring any changes to the templates are automatically applied to the infrastructure.
+    </li>
+    <li>
+        <strong>Frontend (Website)</strong>: This pipeline uploads webpage changes to the S3 bucket and invalidates the CloudFront cache, making the updates immediately available to users worldwide.
+    </li>
+</ol>
+
+<h2>Putting everything together</h2>
+
+<p>
+The diagram below shows the complete architecture with more detail than the previous abstractions. It also serves as a helpful guide when exploring my repository, which you can check out 
+<a href="https://github.com/n0rbed/personal-website">here</a>.
+</p>
+
+<img src="./thisWebsite_ArchitectureDiagrams/completeArchitecture.png">
+
 </main>
 
 </div>

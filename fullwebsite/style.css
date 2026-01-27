@@ -5,6 +5,19 @@
     --text: #1d1d1f;
 }
 
+img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 1rem auto;
+}
+
+body {
+  font-size: 18px;
+  line-height: 1.7;
+}
+
+
 #visit-indicator {
     position: fixed;
     top: 15px;
