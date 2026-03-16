@@ -136,7 +136,7 @@
 
     <p>When we got everything running, the FPS coming from the camera module was incredibly bad (the FPS you'll see below is actually the improved one, i know its not optimal for gaming purposes), why?</p>
 
-    <p>After using my computer networks skills I reached the conclusion that it was the bandwidth of the ESP. The ESP32 by default has a capped upload speed of 150 kb with an antenna, and even lower without an antenna. We were not using an antenna at the start, so we did attach one and it greatly improved.</p>
+    <p>After using my computer networking skills (and a lot of tests) I reached the conclusion that it was the bandwidth of the ESP. The ESP32 by default has a capped upload speed of 150 kbps with an antenna, and even lower without an antenna. We were not using an antenna at the start, so we did attach one and it greatly improved.</p>
 
     <p>You may ask, isn't the router that the ESP is connected to responsible for forwarding the pics it receives from the ESP to the EC2 server? Yes, but we also recall from network theory that any end-to-end connection has a maximum speed of the <em>minimum</em> throughput of any link in our chain. So we're ultimately capped by the ESP.</p>
 
