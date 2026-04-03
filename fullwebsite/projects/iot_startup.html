@@ -47,13 +47,10 @@
     </ol>
 
     <h2>The Initial Website Hosting</h2>
-
     <p>This section shouldn't take long as we are pretty constrained on what we could do. Since the database needs to run MySQL, our two options are Aurora and RDS. The startup had estimated that their number of clients would be around 50, so Aurora would be overkill (because you'd be provisioning a cluster for a single database), and pricier than the alternative, RDS.</p>
-
-    <p>I then chose to host the website on a simple EC2 webserver for a couple of reasons. We need compute to ingest the video streaming regardless. If we use KVS to ingest the video streams from the IoT things, we would still need somewhere to both process this stream <em>and</em> host the website. Since this startup's idea is not too complex and they do not plan on adding any compute-heavy services in the future, hosting both the stream ingestion and website on the same EC2 server was the most cost effective and made the most sense.</p>
-
+    <p>I then chose to host the website on a simple EC2 webserver for a couple of reasons. We need compute to ingest the video streaming regardless. If we use KVS to ingest the video streams from the IoT things, we would still need somewhere to both process this stream <em>and</em> host the website. Since this startup's idea is not too complex and they do not plan on adding any compute-heavy services in the future, deploying the website on the same EC2 server that we ingest our streams on is the most cost effective solution and made the most sense from an administration perspective.</p>
+    <p>The instance was bootstrapped using an EC2 user data script that handled installing the required utilities and deploying the website automatically on first launch, avoiding any manual setup. This removes me from the equation when I submit the project to the startup, so that they have a "one click deployment" button when running my terraform scripts.</p>
     <p>It goes without saying that a user has N horses, each horse can be assigned a feeder + a camera or nothing. It cannot be assigned more than 1 camera or more than 1 feeder. It can be assigned a camera without a feeder and vice versa. This will be very important in the next section.</p>
-
     <p>So far we get:</p>
     <img src="./iot_startup_pics/pic1.png" alt="Initial architecture diagram">
 
