@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Yassin AbdelHay</title>
+    <link rel="icon" type="image/x-icon" href="../favicon.ico">
+    <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<div class="wrapper">
+
+<nav>
+    <a href="../index.html">Home</a>
+
+    <a href="../projects.html">Projects</a>
+    <div class="submenu">
+        <a href="ai_inference_pipeline.html" class="active">CPU-AI Inference Cloud Deployment</a>
+        <a href="iot_startup.html">IoT Startup</a>
+        <a href="thiswebsite.html">This website</a>
+        <a href="symbolic_solver.html">Symbolic Solver</a>
+    </div>
+
+    <a href="../blog.html">Blog</a>
+    <a href="../CV.pdf" target="_blank">CV</a>
+    <a href="../contact.html">Contact</a>
+</nav>
+
+<main>
+    <h1>CPU-AI Inference Cloud Deployment</h1>
+
+    <p>Recently I had to design and implement an AI workload cloud architecture. The goal was to deploy 2-3 models that work back to back. Below are the details on the models (The model choices and AI work in this project are done by Abdelrahman AlAmrawy). They are all zero shot models, meaning that the models only understand and train on what is currently in the text prompt (pre-inference). The example below in DINO further explains this.</p>
+
+    <ol>
+
+        <li>The first model is Grounding DINO. It takes text input and finds that input in the image you feed it. It then draws bounding boxes around the object.  For example, if the text prompts are "dog. cat. hamster.", Grounding DINO will try to find these animals in the image you feed it.</li>
+
+        <li>The second model is also a zero-shot model, named <code>convnext</code>. It gets fed each of the boxes that Grounding DINO has drawn. For each box, it classifies some properties of the animals we're looking at, their breed for example.</li>
+
+        <li>The final model is <code>clip</code>, by open AI. It determines the color and pattern of the animals.</li>
+
+    </ol>
+
+    <p>Here are the deployment requirements:</p>
+
+    <ol>
+
+        <li>Fast. This means &lt; 5 seconds from the user submitting their post request with an image and getting a response.</li>
+
+        <li>Cost effective and cheap. This workload is intended for a startup, we cannot afford provisioning a large server with big GPUs running 24/7 to save cold startup times in case users come at any time. For reference, c9g.12xlarge costs 2.08 USD hourly and can handle around 10 requests simultaneously in our case. However, this costs around 1500 USD per month! Even worse, we pay this regardless of how much traffic we have (yes, 1500 USD per month even if you have zero traffic). Ideally, the solution should not cost us more than 100 USD a month when we are facing idle traffic.</li>
+
+    </ol>
+
+    <h2>Initial exploration</h2>
+
+    <p>The AI developer gave me a python script which does the inference. Thus, I decided to first write a docker image which loads the models and the sample script I was given and tried to optimize its size. I did this because having a docker image at hand can give us some idea of what options we have in deployment.</p>
+
+    <p>The first thing that came to mind was, should I embed the models inside the docker image or make the container pull it at runtime from a cloud storage service like S3? The latter solution messes up our first requirement, as pulling ~ 1.5 gigabytes from S3 would take precious time from our 5 second budget. As such, embedding the models in the docker image made more sense. After optimizing the docker image and using a multi-stage build process, I got the size down to 2.4 GB, which does not affect our cold startup time much compared to starting a 700 mb container then pulling in 1.5 GB of model weights.</p>
+
+    <div class="code-container">
+        <div class="code-block">
+            <span class="line"><span class="keyword">FROM</span> <span class="function">python</span>:<span class="number">3.14</span>-slim <span class="keyword">AS</span> build</span>
+            <span class="line"><span class="keyword">EXPOSE</span> <span class="number">80</span></span>
+            <span class="line"><span class="keyword">WORKDIR</span> /code</span>
+            <span class="line"></span>
+            <span class="line"><span class="keyword">RUN</span> <span class="function">python</span> -m venv /opt/venv</span>
+            <span class="line"><span class="keyword">ENV</span> PATH=<span class="string">"/opt/venv/bin:$PATH"</span></span>
+            <span class="line"></span>
+            <span class="line"><span class="keyword">COPY</span> ./requirements.txt /code/</span>
+            <span class="line"></span>
+            <span class="line"><span class="comment"># Install PyTorch CPU and your requirements, then immediately hot-swap OpenCV to save space</span></span>
+            <span class="line"><span class="keyword">RUN</span> <span class="function">pip</span> <span class="function">install</span> --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu \</span>
+            <span class="line">    <span class="operator">&amp;&amp;</span> <span class="function">pip</span> <span class="function">install</span> --no-cache-dir -r /code/requirements.txt \</span>
+            <span class="line">    <span class="operator">&amp;&amp;</span> <span class="function">pip</span> <span class="function">uninstall</span> -y opencv-python \</span>
+            <span class="line">    <span class="operator">&amp;&amp;</span> <span class="function">pip</span> <span class="function">install</span> --no-cache-dir opencv-python-headless \</span>
+            <span class="line">    <span class="operator">&amp;&amp;</span> <span class="function">rm</span> -rf /root/.cache/<span class="function">pip</span></span>
+            <span class="line"></span>
+            <span class="line"><span class="keyword">COPY</span> ./convnext_animals_traced.pt ./models ./</span>
+            <span class="line"><span class="keyword">COPY</span> ./main.py ./</span>
+            <span class="line"><span class="keyword">RUN</span> <span class="function">python</span> -c <span class="string">"import main"</span></span>
+            <span class="line"></span>
+            <span class="line"></span>
+            <span class="line"><span class="keyword">FROM</span> <span class="function">python</span>:<span class="number">3.14</span>-slim <span class="keyword">AS</span> prod</span>
+            <span class="line"><span class="keyword">EXPOSE</span> <span class="number">80</span></span>
+            <span class="line"><span class="keyword">WORKDIR</span> /code</span>
+            <span class="line"></span>
+            <span class="line"><span class="keyword">COPY</span> --from=build /opt/venv /opt/venv</span>
+            <span class="line"><span class="keyword">COPY</span> --from=build /code /code</span>
+            <span class="line"></span>
+            <span class="line"><span class="keyword">ENV</span> PATH=<span class="string">"/opt/venv/bin:$PATH"</span></span>
+            <span class="line"></span>
+            <span class="line"><span class="keyword">CMD</span> [<span class="string">"uvicorn"</span>, <span class="string">"main:app"</span>, <span class="string">"--host"</span>, <span class="string">"0.0.0.0"</span>, <span class="string">"--port"</span>, <span class="string">"80"</span>]</span>
+        </div>
+    </div>
+
+    <p>I then explored the costs of deploying this in multiple ways.</p>
+
+    <p>Note that upon testing this, we concluded that we do NOT need GPUs to meet our performance requirement of &lt; 5 seconds end-to-end. As such, I only designed solutions that use CPU compute.</p>
+
+    <p>To keep everything below objective, we assume that we need 8 GB of memory and around 6 vCPUs to run one request with the performance we aim for.</p>
+
+    <h2>ECS managed CPU instances</h2>
+
+    <p>I'll have to handle scaling and load balancing myself if I use this for deployment, as ECS does not handle that and only gives you compute.</p>
+
+    <p>The managing fee + base cost of <code>c8g.xlarge</code> (8 GB ram and 4 vCPUs) is:</p>
+
+    <div class="code-container">
+        <div class="code-block">
+            <span class="line">(<span class="number">0.01914</span>+<span class="number">0.15896</span>) * <span class="number">24</span> * <span class="number">30</span> = <span class="number">128.2</span> USD</span>
+        </div>
+    </div>
+
+    <p>This is not bad, but remember that this is for only one instance, and that we will definitely need to scale up if we get more than 1 request per 5-6 seconds, so this is the MINIMUM cost.</p>
+
+    <h2>SageMaker</h2>
+
+    <p>Amazon SageMaker has a lot of different services and it can get confusing, so let's go through some of them:</p>
+
+    <p>Amazon SageMaker Serverless Inference is a purpose-built inference option that enables you to deploy and scale ML models without configuring or managing any of the underlying infrastructure. Sadly though, it has a long boot up time which consists of downloading our docker image and the startup time of the container. While the startup time of the container isn't bad, after starting up the container loads the model weights from its filesystem, and that alone takes 3 seconds.  Below is part of our inference script to make this clearer.</p>
+
+    <div class="code-container">
+        <div class="code-block">
+            <span class="line">        <span class="keyword">def</span> load_clip():</span>
+            <span class="line">            <span class="keyword">try</span>:</span>
+            <span class="line">                m, _, p = open_clip.create_model_and_transforms(<span class="string">"hf-hub:Marqo/marqo-fashionSigLIP"</span>)</span>
+            <span class="line">                t = open_clip.get_tokenizer(<span class="string">"hf-hub:Marqo/marqo-fashionSigLIP"</span>)</span>
+            <span class="line">            <span class="keyword">except</span> Exception:</span>
+            <span class="line">                m, _, p = open_clip.create_model_and_transforms(<span class="string">"ViT-B-32"</span>, pretrained=<span class="string">"openai"</span>)</span>
+            <span class="line">                t = open_clip.get_tokenizer(<span class="string">"ViT-B-32"</span>)</span>
+            <span class="line">            m = m.to(device).eval()</span>
+            <span class="line">            <span class="keyword">return</span> m, p, t</span>
+        </div>
+    </div>
+
+    <p>Amazon SageMaker real time inference does the job but with an INSANE price difference relative to ECS managed instances. We're not charged only at the time of inference here, so this isn't a pure serverless solution and it does not matter if we're getting high or low requests, we pay for what we provision, at a premium cost as well.</p>
+
+    <img src="./sagemaker_endpoints.png" alt="SageMaker real-time inference pricing screenshot">
+
+    <p>If we provision an <code>ml.c8g.xlarge</code> server which has 8 GB ram and 4 vCPUs, we pay 157 USD per month for only running one instance. Using this solution, I will have to handle scaling by telling SageMaker when to scale. For example, scaling to hit a target of 12 requests per minute per instance. This is so far not that bad. Note that we have omitted the volume of data processed from the calculation.</p>
+
+    <p>I still do not like needing to handle the admin overhead of scaling though. Why? Because I'll have to predict the usage of this workload I'm deploying and that's just more work for me.</p>
+
+    <h2>ECS Fargate (CPU only)</h2>
+
+    <p>Using this, we will have to keep at least 1 task ready for the entire month so that we have no cold-startup time. Since we need a minimum of 8 vCPUs and 10 GB ram, the pricing is as follows:</p>
+
+    <div class="code-container">
+        <div class="code-block">
+            <span class="line">price per hour = <span class="number">0.04656</span> * <span class="number">6</span> +  <span class="number">0.00511</span> * <span class="number">8</span> = <span class="number">0.32024</span> usd per hour</span>
+        </div>
+    </div>
+
+    <p>Since we keep 1 task ready for the entire month, this costs: 231 USD monthly as the starting point. The cost of course increases depending on traffic because we would need more tasks when our user usage increases.</p>
+
+    <h2>Lambda</h2>
+
+    <p>This is the fun and interesting one. Using this solution, we can also meet both our performance and cost effectiveness requirements. We can also NOT be responsible for scaling/load balancing, etc.</p>
+
+    <p>To meet our performance constraints of having an end to end workload though we can not <em>only</em> use Lambda without its additional features. This is because we would have to load the models when the lambda function is invoked, which again can take up to 3 seconds and that's valuable time. To fix this, we use Lambda snap-start. This introduces multiple constraints though.</p>
+
+    <p>Lambda + snap-start first initializes our function and stops right before executing the lambda handler (the main purpose of the lambda function), and then takes a snapshot of the state of the initialized memory and disk state using a "Firecracker" microVM. Afterwards, when a lambda function is invoked, it immediately restores this snapshot and executes the lambda handler after. Restoring the microVM snapshot takes time though (1-2 seconds for our case) , and the heavier the snapshot is (e.g. due to big models loaded into the lambda function's memory), the longer this restore time will take. The 1-2 seconds restore time is worth it from a trade-off point of view because we get incredibly easy scaling and cost effectiveness as a startup business when using Lambda. Moreover, when multiple invocations are happening there is always the benefit of warm starts so this restore time is reduced to 0 seconds.</p>
+
+    <p>Note that, although the restore time of the snapshot of Lambda after its initialization phase is only dependent on the snapshot's size, AWS bills you for the lambda function's entire memory as if it was used as the snapshot size. This will be apparent when we are calculating the cost below.</p>
+
+    <p>The hurdle we have to overcome is that Lambda + snap-start limits our <code>/tmp</code> storage to 512 <code>mb</code>. While this seems fine, we use pytorch for inference. The pytorch CPU wheel on its own is like 700 megabytes (iirc) and so that's a problem. We also need to fit all our dependencies in a lambda layer which is only 250 <code>mb</code>, unzipped. Yikes. The approach mentioned <a href="https://segments.ai/blog/pytorch-on-lambda/" target="_blank">here</a> gives us the first step in what we need to do though.</p>
+
+    <p>Basically, we zip the heavy dependencies inside the lambda layer while keeping other dependencies unzipped. When the lambda function is invoked, we unzip these dependencies in <code>/tmp</code> and use them as needed. If you do this with the CPU wheel of pytorch, you will unfortunately fail because it's still too large. The solution to this is to build torch from source with ONLY the things we will use in our inference. This of course depends on what your models do and can be a trial and error process. Below are the other dependencies in our lambda layer.</p>
+
+    <div class="code-container">
+        <div class="code-block">
+            <span class="line">pillow</span>
+            <span class="line">python-dotenv</span>
+            <span class="line">requests</span>
+            <span class="line">transformers==<span class="number">4.42.4</span></span>
+            <span class="line">safetensors</span>
+            <span class="line">sympy</span>
+            <span class="line">numpy&lt;<span class="number">2.0</span>,&gt;=<span class="number">1.23</span></span>
+        </div>
+    </div>
+
+    <p>I built the lambda layer using a docker to make use of layer caching. This is beneficial because torch takes around 1 hour to build. Using layer caching, I need to only build once (with <code>ENV</code> flags unchanged) and then can change any step after that with no problem. The <code>Dockerfile</code> for building the lambda layer is below. Note that we're building <code>torchvision</code> so its compiled extensions link directly against our built torch.</p>
+
+    <div class="code-container">
+        <div class="code-block">
+            <span class="line"><span class="comment"># IMPORTANT: base image changed from python:3.12-slim (Debian) to the</span></span>
+            <span class="line"><span class="comment"># ACTUAL Lambda runtime image. This is the fix for the glibc mismatch we</span></span>
+            <span class="line"><span class="comment"># hit during local testing: python:3.12-slim ships a newer glibc than the</span></span>
+            <span class="line"><span class="comment"># real Lambda execution environment.</span></span>
+            <span class="line"><span class="keyword">FROM</span> public.ecr.aws/lambda/<span class="function">python</span>:<span class="number">3.12</span> <span class="keyword">AS</span> builder</span>
+            <span class="line"></span>
+            <span class="line"><span class="comment"># libgomp-devel pulls in the matching headers/symlinks for OpenMP,</span></span>
+            <span class="line"><span class="comment"># so the wheel links against THIS image's</span></span>
+            <span class="line"><span class="comment"># libgomp rather than needing to source it separately afterward.</span></span>
+            <span class="line"><span class="comment"># libjpeg-turbo-devel/libpng-devel are added here for torchvision's image</span></span>
+            <span class="line"><span class="comment"># codec extensions (decode_jpeg/decode_png)</span></span>
+            <span class="line"><span class="keyword">RUN</span> <span class="function">dnf</span> <span class="function">install</span> -y \</span>
+            <span class="line">    <span class="function">gcc</span> \</span>
+            <span class="line">    gcc-c++ \</span>
+            <span class="line">    <span class="function">make</span> \</span>
+            <span class="line">    <span class="function">cmake</span> \</span>
+            <span class="line">    <span class="function">git</span> \</span>
+            <span class="line">    libgomp \</span>
+            <span class="line">    libjpeg-turbo-devel \</span>
+            <span class="line">    openblas-devel \</span>
+            <span class="line">    libpng-devel \</span>
+            <span class="line">    <span class="operator">&amp;&amp;</span> <span class="function">dnf</span> <span class="function">clean</span> all \</span>
+            <span class="line">    <span class="operator">&amp;&amp;</span> <span class="function">rm</span> -rf /var/cache/<span class="function">dnf</span></span>
+            <span class="line"></span>
+            <span class="line"><span class="keyword">RUN</span> <span class="function">pip3</span> <span class="function">install</span> --no-cache-dir --upgrade <span class="function">pip</span> setuptools wheel pyyaml typing_extensions</span>
+            <span class="line"><span class="keyword">RUN</span> <span class="function">pip3</span> <span class="function">install</span> --no-cache-dir <span class="string">"numpy&lt;2.0,&gt;=1.23"</span></span>
+            <span class="line"></span>
+            <span class="line"><span class="keyword">WORKDIR</span> /tmp</span>
+            <span class="line"></span>
+            <span class="line"><span class="keyword">RUN</span> <span class="function">git</span> <span class="function">clone</span> --depth <span class="number">1</span> --branch v2.<span class="number">3.1</span> --recurse-submodules --shallow-submodules https://github.com/pytorch/pytorch.<span class="function">git</span></span>
+            <span class="line"></span>
+            <span class="line"><span class="keyword">WORKDIR</span> /tmp/pytorch</span>
+            <span class="line"></span>
+            <span class="line"><span class="comment"># The flags we need for our inference to work. Change based on your inference script.</span></span>
+            <span class="line"><span class="keyword">ENV</span> BUILD_TEST=<span class="number">0</span> \</span>
+            <span class="line">    USE_DISTRIBUTED=<span class="number">0</span> \</span>
+            <span class="line">    USE_NCCL=<span class="number">0</span> \</span>
+            <span class="line">    USE_GLOO=<span class="number">0</span> \</span>
+            <span class="line">    USE_TENSORPIPE=<span class="number">0</span> \</span>
+            <span class="line">    USE_MKL=<span class="number">0</span> \</span>
+            <span class="line">    USE_MKLDNN=<span class="number">1</span> \</span>
+            <span class="line">    BLAS=OpenBLAS \</span>
+            <span class="line">    USE_CUDA=<span class="number">0</span> \</span>
+            <span class="line">    USE_ROCM=<span class="number">0</span> \</span>
+            <span class="line">    USE_GFLAGS=<span class="number">0</span> \</span>
+            <span class="line">    USE_GLOG=<span class="number">0</span> \</span>
+            <span class="line">    USE_NNPACK=<span class="number">0</span> \</span>
+            <span class="line">    USE_QNNPACK=<span class="number">0</span> \</span>
+            <span class="line">    USE_PYTORCH_QNNPACK=<span class="number">0</span> \</span>
+            <span class="line">    USE_XNNPACK=<span class="number">0</span> \</span>
+            <span class="line">    USE_KINETO=<span class="number">0</span> \</span>
+            <span class="line">    USE_FBGEMM=<span class="number">0</span> \</span>
+            <span class="line">    USE_BREAKPAD=<span class="number">0</span> \</span>
+            <span class="line">    USE_ITT=<span class="number">0</span> \</span>
+            <span class="line">    CMAKE_BUILD_TYPE=Release \</span>
+            <span class="line">    MAX_JOBS=<span class="number">2</span> \</span>
+            <span class="line">    CFLAGS=<span class="string">"-O2"</span> \</span>
+            <span class="line">    CXXFLAGS=<span class="string">"-O2"</span></span>
+            <span class="line"><span class="keyword">RUN</span> <span class="function">python3</span> setup.py <span class="function">clean</span> <span class="operator">&amp;&amp;</span> <span class="function">python3</span> setup.py bdist_wheel</span>
+            <span class="line"></span>
+            <span class="line"><span class="comment"># We have to build torchvision against THIS torch, not the official PyPI one</span></span>
+            <span class="line"><span class="comment"># Reason: torchvision's compiled extension (torchvision._C) links directly</span></span>
+            <span class="line"><span class="comment"># against libtorch's C++ symbols. The official PyPI torchvision wheel is</span></span>
+            <span class="line"><span class="comment"># built against the official PyPI torch wheel's exact ABI settings (e.g.</span></span>
+            <span class="line"><span class="comment"># -D_GLIBCXX_USE_CXX11_ABI). Building from source here, in the same</span></span>
+            <span class="line"><span class="comment"># environment right after installing the torch wheel we just built,</span></span>
+            <span class="line"><span class="comment"># guarantees the ABI matches.</span></span>
+            <span class="line"><span class="comment">#</span></span>
+            <span class="line"><span class="comment"># v0.18.1 is the torchvision release matched to torch v2.3.1</span></span>
+            <span class="line"><span class="comment"># (see https://github.com/pytorch/vision#installation compatibility table).</span></span>
+            <span class="line"><span class="comment">#</span></span>
+            <span class="line"><span class="comment"># FORCE_CUDA=0 / the TORCHVISION_USE_* flags disable GPU codec paths</span></span>
+            <span class="line"><span class="comment"># (nvjpeg, ffmpeg video decoding) that aren't needed for CPU image</span></span>
+            <span class="line"><span class="comment"># classification and would otherwise pull in extra native deps.</span></span>
+            <span class="line"><span class="keyword">RUN</span> <span class="function">pip3</span> <span class="function">install</span> --no-cache-dir dist/torch-*.whl</span>
+            <span class="line"></span>
+            <span class="line"><span class="keyword">WORKDIR</span> /tmp</span>
+            <span class="line"><span class="keyword">RUN</span> <span class="function">git</span> <span class="function">clone</span> --depth <span class="number">1</span> --branch v0.<span class="number">18.1</span> --recurse-submodules --shallow-submodules https://github.com/pytorch/vision.<span class="function">git</span></span>
+            <span class="line"></span>
+            <span class="line"></span>
+            <span class="line"><span class="keyword">WORKDIR</span> /tmp/vision</span>
+            <span class="line"><span class="keyword">RUN</span> <span class="function">pip3</span> <span class="function">install</span> --no-cache-dir <span class="string">"setuptools&lt;82"</span></span>
+            <span class="line"><span class="keyword">ENV</span> FORCE_CUDA=<span class="number">0</span> \</span>
+            <span class="line">    TORCHVISION_USE_NVJPEG=<span class="number">0</span> \</span>
+            <span class="line">    TORCHVISION_USE_VIDEO_CODEC=<span class="number">0</span> \</span>
+            <span class="line">    TORCHVISION_USE_FFMPEG=<span class="number">0</span> \</span>
+            <span class="line">    MAX_JOBS=<span class="number">2</span> \</span>
+            <span class="line">    CFLAGS=<span class="string">"-O2"</span> \</span>
+            <span class="line">    CXXFLAGS=<span class="string">"-O2"</span></span>
+            <span class="line"><span class="keyword">RUN</span> <span class="function">python3</span> setup.py bdist_wheel</span>
+            <span class="line"></span>
+            <span class="line"></span>
+            <span class="line"><span class="comment"># STAGE 2: Build the Lambda Layer Zip Artifact</span></span>
+            <span class="line"><span class="keyword">FROM</span> public.ecr.aws/lambda/<span class="function">python</span>:<span class="number">3.12</span> <span class="keyword">AS</span> layer-generator</span>
+            <span class="line"></span>
+            <span class="line"><span class="comment"># binutils (for `strip`) and zip -- AL2023 package names.</span></span>
+            <span class="line"><span class="keyword">RUN</span> <span class="function">dnf</span> <span class="function">install</span> -y \</span>
+            <span class="line">    binutils \</span>
+            <span class="line">    <span class="function">zip</span> \</span>
+            <span class="line">    libgomp \</span>
+            <span class="line">    findutils \</span>
+            <span class="line">    openblas-devel \</span>
+            <span class="line">    libgfortran \</span>
+            <span class="line">    <span class="operator">&amp;&amp;</span> <span class="function">dnf</span> <span class="function">clean</span> all \</span>
+            <span class="line">    <span class="operator">&amp;&amp;</span> <span class="function">rm</span> -rf /var/cache/<span class="function">dnf</span></span>
+            <span class="line"></span>
+            <span class="line"><span class="keyword">WORKDIR</span> /workspace</span>
+            <span class="line"><span class="keyword">RUN</span> <span class="function">mkdir</span> -p /workspace/<span class="function">python</span></span>
+            <span class="line"></span>
+            <span class="line"><span class="comment"># Install torch + torchvision together, with --no-deps, from Stage 1 build</span></span>
+            <span class="line"><span class="comment"># --no-deps is critical here: without it, pip would see torchvision's</span></span>
+            <span class="line"><span class="comment"># declared "torch==2.3.1" requirement and, since --target is just a plain</span></span>
+            <span class="line"><span class="comment"># directory (not a resolver-visible environment), go fetch the OFFICIAL</span></span>
+            <span class="line"><span class="comment"># torch wheel from PyPI to "satisfy" it</span></span>
+            <span class="line"><span class="keyword">COPY</span> --<span class="keyword">from</span>=builder /tmp/pytorch/dist/torch-*.whl .</span>
+            <span class="line"><span class="keyword">COPY</span> --<span class="keyword">from</span>=builder /tmp/vision/dist/torchvision-*.whl .</span>
+            <span class="line"><span class="keyword">RUN</span> <span class="function">pip</span> <span class="function">install</span> --no-deps --no-cache-dir --target /workspace/<span class="function">python</span>/ \</span>
+            <span class="line">        torch-*.whl torchvision-*.whl \</span>
+            <span class="line">    <span class="operator">&amp;&amp;</span> <span class="function">rm</span> torch-*.whl torchvision-*.whl</span>
+            <span class="line"></span>
+            <span class="line"><span class="comment"># Install remaining runtime dependencies from requirements.txt</span></span>
+            <span class="line"><span class="keyword">COPY</span> req_layer.txt .</span>
+            <span class="line"><span class="keyword">RUN</span> <span class="function">pip</span> <span class="function">install</span> --no-cache-dir --target /workspace/<span class="function">python</span>/ -r req_layer.txt</span>
+            <span class="line"></span>
+            <span class="line"><span class="comment"># This next step is necessary because the Lambda runtime doesn't include</span></span>
+            <span class="line"><span class="comment"># the dnf installs we made above (libgomp, libopenblas, libgfortran).</span></span>
+            <span class="line"><span class="comment"># 1. Grab the main OpenBLAS library (using find so we don't assume the exact symlink name)</span></span>
+            <span class="line"><span class="keyword">RUN</span> <span class="function">cp</span> -L $(<span class="function">find</span> /usr/lib64 -name <span class="string">"libopenblas.so.*"</span> | <span class="function">head</span> -n <span class="number">1</span>) /workspace/<span class="function">python</span>/torch/lib/libopenblas.so.<span class="number">0</span></span>
+            <span class="line"></span>
+            <span class="line"><span class="comment"># 2. Use ldd to find EVERY dynamic dependency of every .so in torch/lib.</span></span>
+            <span class="line"><span class="comment"># 3. Filter out the core system libraries that Lambda already provides natively</span></span>
+            <span class="line"><span class="comment">#    (glibc, libm, libgcc, libstdc++, etc.).</span></span>
+            <span class="line"><span class="comment"># 4. Copy the remaining required libraries (Fortran, OpenMP, QuadMath, etc.)</span></span>
+            <span class="line"><span class="comment">#    directly into torch/lib so they get zipped up.</span></span>
+            <span class="line"><span class="keyword">RUN</span> <span class="function">find</span> /workspace/<span class="function">python</span>/torch/lib/ -type f -name <span class="string">"*.so*"</span> -exec <span class="function">ldd</span> {} \; <span class="number">2</span>&gt;/dev/null \</span>
+            <span class="line">    | <span class="function">grep</span> <span class="string">"=&gt; /"</span> \</span>
+            <span class="line">    | <span class="function">awk</span> <span class="string">'{print $3}'</span> \</span>
+            <span class="line">    | <span class="function">sort</span> -u \</span>
+            <span class="line">    | <span class="function">grep</span> -Ev <span class="string">'/libc\.so|/libm\.so|/libpthread\.so|/libdl\.so|/librt\.so|/libresolv\.so|/libgcc_s\.so|/libstdc\+\+\.so|/ld-linux'</span> \</span>
+            <span class="line">    | <span class="function">xargs</span> -I {} <span class="function">cp</span> -n -L {} /workspace/<span class="function">python</span>/torch/lib/ \</span>
+            <span class="line">    <span class="operator">&amp;&amp;</span> <span class="function">ls</span> -la /workspace/<span class="function">python</span>/torch/lib/</span>
+            <span class="line"></span>
+            <span class="line"></span>
+            <span class="line"><span class="comment"># These are unnecessary</span></span>
+            <span class="line"><span class="keyword">RUN</span> <span class="function">rm</span> -rf /workspace/<span class="function">python</span>/torch/include</span>
+            <span class="line"><span class="keyword">RUN</span> <span class="function">rm</span> -rf /workspace/<span class="function">python</span>/torch/share</span>
+            <span class="line"></span>
+            <span class="line"><span class="comment"># torch/bin: keep this directory, but only keep torch_shm_manager inside</span></span>
+            <span class="line"><span class="comment"># because removing it crashes torch on import</span></span>
+            <span class="line"><span class="keyword">RUN</span> <span class="function">find</span> /workspace/<span class="function">python</span>/torch/bin -type f ! -name <span class="string">'torch_shm_manager'</span> -delete <span class="number">2</span>&gt;/dev/null || true</span>
+            <span class="line"></span>
+            <span class="line"><span class="comment"># Squeeze out remaining binary symbol table bloat from shared objects.</span></span>
+            <span class="line"><span class="comment"># --strip-unneeded preserves the dynamic symbol table (.dynsym) needed for</span></span>
+            <span class="line"><span class="comment"># Python's C extension loader / pybind11 boundary, while removing debug symbols</span></span>
+            <span class="line"><span class="keyword">RUN</span> <span class="function">find</span> /workspace/<span class="function">python</span>/ -name <span class="string">"*.so"</span> -exec <span class="function">strip</span> --strip-unneeded {} \;</span>
+            <span class="line"></span>
+            <span class="line"></span>
+            <span class="line"><span class="comment"># More pruning</span></span>
+            <span class="line"><span class="keyword">RUN</span> <span class="function">rm</span> -rf /workspace/<span class="function">python</span>/hf_xet* \</span>
+            <span class="line">    <span class="operator">&amp;&amp;</span> <span class="function">find</span> /workspace/<span class="function">python</span>/numpy -type d -name <span class="string">"tests"</span> -exec <span class="function">rm</span> -rf {} + \</span>
+            <span class="line">    <span class="operator">&amp;&amp;</span> <span class="function">rm</span> -rf /workspace/<span class="function">python</span>/numpy/f2py \</span>
+            <span class="line">    <span class="operator">&amp;&amp;</span> <span class="function">rm</span> -rf /workspace/<span class="function">python</span>/numpy/distutils \</span>
+            <span class="line">    <span class="operator">&amp;&amp;</span> <span class="function">rm</span> -rf /workspace/<span class="function">python</span>/numpy/doc</span>
+            <span class="line"></span>
+            <span class="line"><span class="comment"># Zip heavy libraries separately INSIDE python/</span></span>
+            <span class="line"><span class="keyword">RUN</span> <span class="function">cd</span> /workspace \</span>
+            <span class="line">    <span class="operator">&amp;&amp;</span> <span class="function">zip</span> -r9 <span class="function">python</span>/torch.<span class="function">zip</span> <span class="function">python</span>/torch <span class="function">python</span>/torch-*.dist-info \</span>
+            <span class="line">    <span class="operator">&amp;&amp;</span> <span class="function">zip</span> -r9 <span class="function">python</span>/sympy.<span class="function">zip</span> <span class="function">python</span>/sympy <span class="function">python</span>/sympy-*.dist-info \</span>
+            <span class="line">    <span class="operator">&amp;&amp;</span> <span class="function">zip</span> -r9 <span class="function">python</span>/transformers.<span class="function">zip</span> <span class="function">python</span>/transformers <span class="function">python</span>/transformers-*.dist-info \</span>
+            <span class="line">    <span class="operator">&amp;&amp;</span> <span class="function">rm</span> -rf /workspace/<span class="function">python</span>/torch /workspace/<span class="function">python</span>/sympy /workspace/<span class="function">python</span>/transformers</span>
+            <span class="line"></span>
+            <span class="line"><span class="comment"># Now python/ contains the .zip files, so they will be included here:</span></span>
+            <span class="line"><span class="keyword">RUN</span> <span class="function">cd</span> /workspace <span class="operator">&amp;&amp;</span> <span class="function">zip</span> -r9 /workspace/pytorch-lambda-layer.<span class="function">zip</span> <span class="function">python</span>/</span>
+            <span class="line"><span class="keyword">CMD</span> [<span class="string">"/bin/bash"</span>]</span>
+        </div>
+    </div>
+
+    <p>Of course, you always have to test whether unzipping the heavy libraries onto a separate directory is &lt; 512 mb, as well as if the unzipped layer is &lt; 250 mb so we can use Lambda snap-start.</p>
+
+    <p>Notice that up until now we have not mentioned where our models are. 1.5 gigabytes will obviously not fit in our <code>/tmp directory</code>. A neat solution for this is loading our models from S3 directly into memory in our initialization phase though! (<a href="https://aws.amazon.com/blogs/compute/deploying-ai-models-for-inference-with-aws-lambda-using-zip-packaging/" target="_blank">source</a>) We do that using <code>memfd</code>, which you can read more about in the AWS article I linked. This eats up some of our memory, so make sure you allocate an extra 1.5 gigs to get the same performance you aim for.</p>
+
+    <p>Funnily enough, when I was doing the pricing calculation for this using the <a href="https://calculator.aws/" target="_blank">AWS Pricing calculator</a>, I found a bug and reported it on AWS re:Post. You can check my post out <a href="https://repost.aws/questions/QU0S72RhVsQ9mlE_TCtgGixg/aws-pricing-calculator-got-gb-seconds-calculation-for-lambda-snapstart-cache-wrong" target="_blank">here</a>.</p>
+
+    <p>The calculation is as follows: Lambda gives you 6 vCPUs when you allocate 10 GB of memory, so let's do that so we get a fair comparison to the other services above. Lambda + snap-start charges us for the following:</p>
+
+    <ol>
+
+        <li>Number of requests</li>
+
+        <li>Snap-start restores: number of snap-start cold-starts X amount of memory allocated</li>
+
+        <li>Lambda compute used: duration of each request X amount of memory allocated</li>
+
+        <li>Snap-start cache: basically the amount of time our lambda function has snap-start enabled, this is measured in GB-seconds and can be calculated by: time of which snap-start is enabled X amount of memory allocated</li>
+
+    </ol>
+
+    <p>We use 3 scenarios to compare this solution to others: (1) Zero traffic per month, (2) regular medium traffic per month (17k requests per day), and (3) bursty traffic for 10 days a month, each with 25k requests per day.</p>
+
+    <h3>Scenario 1: zero traffic per month</h3>
+
+    <p>The charges are, in the order mentioned above respectively:</p>
+
+    <ol>
+
+        <li>Number of requests: 0 USD</li>
+
+        <li>Snap-start restores: 0 USD</li>
+
+        <li>Lambda compute used: 0 USD</li>
+
+        <li>Snap-start cache: If we use 10 GB memory and we have snap-start enabled for the entire month: <code>0.0000015046 per GB-second * 10 GB * 30 * 24 * 60 * 60 = 39 USD</code></li>
+
+    </ol>
+
+    <p>So a total of 39 USD per month if we idle. Compared to all the other solutions we have, this is a clear winner.</p>
+
+    <h3>Scenario 2: Regular predictable traffic per month</h3>
+
+    <p>Why 17k requests? Because the other solutions <em>could</em> theoretically be used 24/7 for back to back requests, and if every request is 5 seconds, we could fit 17.2 k requests per day. Of course, in online applications this never happens and instead we see sporadic requests throughout the day with some hours having a lot more traffic than others, which the other solutions above fail to fulfill unless they scale at these busy times, coming at an extra cost.</p>
+
+    <p>The charges are, in the order mentioned above respectively:</p>
+
+    <ol>
+
+        <li>Number of requests: <code>0.2 USD</code> per 1 Million request, so if 17k every day for a month we get: <code>0.2/(10^6) * (17 * (10^3) * 30) = 0.102 USD</code></li>
+
+        <li>Snap-start restores: We only get 1 cold start at the start of the month and then every invocation after that uses the same warm lambda function since they're back to back 24/7, but supposing that is not the case and that we do cold-starts for 10% of invocations: <code>0.1 * 0.0001397998 for every GB restored * 10 GB * 17 * (10^3) * 30 = 72 USD</code></li>
+
+        <li>Lambda compute used:  <code>0.0000166667 for every GB-second  * 5 seconds *  10 GB * 17 * (10^3) * 30 = 425 USD</code></li>
+
+        <li>Snap-start cache: <code>39 USD</code> - This does not vary with traffic and we keep it enabled for the entire month</li>
+
+    </ol>
+
+    <p>We get a total of <code>0.102 + 72 + 425 + 39 = 526.1 USD</code>. Although this scenario is very unlikely, we have to admit in this case this solution is worse cost wise than the others.</p>
+
+    <h3>Scenario 3: Bursty traffic for 10 days a month, each with 25k requests per day</h3>
+
+    <ol>
+
+        <li>Number of requests: <code>0.2 USD</code> per 1 Million request, so if 25k every day for a month we get: <code>0.2/(10^6) * (25 * (10^3) * 10) = 0.05 USD</code></li>
+
+        <li>Snap-start restores: Let's assume this time we get 25% cold-starts because of the bursty nature of this scenario, and that the traffic comes while everything is cold: <code>0.25 * 0.0001397998 for every GB restored * 10 GB * 25 * (10^3) * 10 = 87.4 USD</code></li>
+
+        <li>Lambda compute used: <code>0.0000166667 for every GB-second  * 5 seconds *  10 GB * 25 * (10^3) * 10 = 208.3 USD</code></li>
+
+        <li>Snap-start cache: <code>39 USD</code></li>
+
+    </ol>
+
+    <p>We get a total of <code>0.05 + 87.4 + 208.3 + 39 = 334.8 USD</code>. This is a really good cost for such a scenario, and not only that, we do not handle scaling ourselves using auto scaling groups or scaling policies like in SageMaker! Moreover, other solutions wouldn't scale as fast as lambda and would have a very long cold startup time (30 seconds to 1 minute as a minimum) when scaling, compared to this almost instant startup time: 1.5 second snap-start microVM restore.</p>
+
+    <p>This solution is by far the winner. I won't go into the details of setting up an API gateway to invoke this lambda function because that's trivial, you could check out <a href="https://docs.aws.amazon.com/lambda/latest/dg/services-apigateway.html" target="_blank">this</a> if necessary.</p>
+
+    <h2>Conclusions and takeaways</h2>
+
+    <p>In this project I have shown that:</p>
+
+    <ol>
+
+        <li>You can run CPU AI inference cost effectively on the cloud by utilizing AWS Lambda + snap-start. This can be done by fitting pytorch and more heavy dependencies in a lambda layer by building torch from source and zipping it + other dependencies then unzipping to <code>/tmp</code> storage at runtime.</li>
+
+        <li>Lambda snap-start allows you to have very small to negligible cold-startup times.</li>
+
+        <li>To overcome <code>/tmp</code> storage 512 mb limit for snap-start you could load model weights from S3 directly into the lambda function's memory in the initialization phase. Although this makes the initialization phase take more time, Lambda snap-start makes this irrelevant since we take a snapshot of the memory and disk state of the lambda function using Firecracker microVM snapshots.</li>
+
+    </ol>
+
+    <p>I have also:</p>
+
+    <ol>
+
+        <li>Compared and contrasted performance and cost effectiveness of different deployment strategies for an AI workload using: ECS managed instances, ECS fargate, SageMaker, and Lambda.</li>
+
+        <li>Discovered and reported an AWS pricing calculator bug for Lambda snap-start cache. Details <a href="https://repost.aws/questions/QU0S72RhVsQ9mlE_TCtgGixg/aws-pricing-calculator-got-gb-seconds-calculation-for-lambda-snapstart-cache-wrong" target="_blank">here</a>.</li>
+
+    </ol>
+
+    <h2>References</h2>
+    TODO - This should be here within a week or so. 
+</main>
+
+</div>
+
+</body>
+</html>
