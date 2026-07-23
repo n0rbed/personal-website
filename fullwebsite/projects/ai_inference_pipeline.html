@@ -35,7 +35,7 @@
 
         <li>The first model is Grounding DINO. It takes text input and finds that input in the image you feed it. It then draws bounding boxes around the object.  For example, if the text prompts are "dog. cat. hamster.", Grounding DINO will try to find these animals in the image you feed it.</li>
 
-        <li>The second model is also a zero-shot model, named <code>convnext</code>. It gets fed each of the boxes that Grounding DINO has drawn. For each box, it classifies some properties of the animals we're looking at, their breed for example.</li>
+        <li>The second model named <code>convnext</code>. It gets fed each of the boxes that Grounding DINO has drawn. For each box, it classifies some properties of the animals we're looking at, their breed for example.</li>
 
         <li>The final model is <code>clip</code>, by open AI. It determines the color and pattern of the animals.</li>
 
@@ -463,7 +463,14 @@
     </ol>
 
     <h2>References</h2>
-    TODO - This should be here within a week or so. 
+        <ol>
+            <li><a href="https://aws.amazon.com/lambda/pricing/" target="_blank">AWS Lambda Pricing</a></li>
+            <li><a href="https://segments.ai/blog/pytorch-on-lambda/" target="_blank">PyTorch on Lambda - Segments.ai Blog</a></li>
+            <li><a href="https://aws.amazon.com/blogs/compute/deploying-ai-models-for-inference-with-aws-lambda-using-zip-packaging/" target="_blank">AWS Compute blog: Deploying AI models for inference with AWS Lambda using zip packaging</a></li>
+            <li><a href="https://aws.amazon.com/sagemaker/ai/pricing/" target="_blank">Amazon SageMaker AI Pricing</a></li>
+            <li><a href="https://aws.amazon.com/ecs/pricing/" target="_blank">Amazon ECS Pricing</a></li>
+            <li><a href="https://aws.amazon.com/ec2/pricing/on-demand/" target="_blank">Amazon EC2 On-Demand Pricing</a></li>
+        </ol>
 </main>
 
 </div>
