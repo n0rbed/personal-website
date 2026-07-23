@@ -292,7 +292,8 @@
             <span class="line"><span class="keyword">WORKDIR</span> /workspace</span>
             <span class="line"><span class="keyword">RUN</span> <span class="function">mkdir</span> -p /workspace/<span class="function">python</span></span>
             <span class="line"></span>
-            <span class="line"><span class="comment"># Install torch+torchvision together, with --no-deps, from Stage 1 build</span></span>
+            <span class="line"><span class="comment"># Install torch + torchvision together, with --no-deps, from Stage 1 build</span></span>
+
             <span class="line"><span class="comment"># --no-deps is critical here: without it, pip would see torchvision's</span></span>
             <span class="line"><span class="comment"># declared "torch==2.3.1" requirement and, since --target is just a plain</span></span>
             <span class="line"><span class="comment"># directory (not a resolver-visible environment), go fetch the OFFICIAL</span></span>
